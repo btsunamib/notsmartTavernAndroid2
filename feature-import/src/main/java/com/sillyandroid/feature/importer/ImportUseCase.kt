@@ -26,6 +26,10 @@ class ImportUseCase(
         return importRepository.importByName(fileName, bytes)
     }
 
+    override fun installExtensionFromGit(url: String, ref: String?): String {
+        return importRepository.installExtensionFromGit(url, ref)
+    }
+
     override fun setConflictMode(mode: ImportConflictMode) {
         importRepository.setImportConflictMode(mode)
     }

@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -21,6 +24,8 @@ interface ChatClient {
         config: ProviderConfig,
         messages: List<NetworkMessage>,
     ): Flow<String>
+
+    suspend fun fetchModels(config: ProviderConfig): List<String>
 }
 
 class OpenAiCompatibleClient(
@@ -82,4 +87,25 @@ class OpenAiCompatibleClient(
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    override suspend fun fetchModels(config: ProviderConfig): List<String> {
+        val request = Request.Builder()
+            .url("${config.baseUrl.trimEnd('/')}/models")
+            .addHeader("Authorization", "Bearer ${config.apiKey}")
+            .get()
+            .build()
+
+        return httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string().orEmpty()
+                throw IOException("HTTP ${response.code}: $errorBody")
+            }
+            val body = response.body?.string().orEmpty()
+            val root = json.parseToJsonElement(body).jsonObject
+            val data = root["data"]?.jsonArray ?: return@use emptyList()
+            data.mapNotNull { item ->
+                runCatching { item.jsonObject["id"]?.jsonPrimitive?.content }.getOrNull()
+            }.distinct()
+        }
+    }
 }

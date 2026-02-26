@@ -15,6 +15,8 @@ interface ChatUseCasePort {
 
     fun dispatchEvent(event: String)
 
+    suspend fun fetchModels(config: ProviderConfig): List<String>
+
     fun streamAssistantReply(
         config: ProviderConfig,
         messages: List<ChatMessage>,

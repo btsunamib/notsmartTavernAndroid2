@@ -40,6 +40,7 @@ interface ImportRepository {
     val importConflictMode: StateFlow<ImportConflictMode>
     fun setImportConflictMode(mode: ImportConflictMode)
     fun importByName(fileName: String, bytes: ByteArray): String
+    fun installExtensionFromGit(url: String, ref: String?): String
 }
 
 interface ExtensionRepository {
@@ -132,8 +133,8 @@ private class InMemoryAppStore :
         return runCatching {
             val lower = fileName.lowercase()
             when {
-                lower.endsWith(".png") -> {
-                    val card = importCharacterPng(fileName, bytes)
+                lower.endsWith(".png") || lower.endsWith(".webp") -> {
+                    val card = importCharacterImage(fileName, bytes)
                     "已导入角色卡: ${card.name}"
                 }
 
@@ -147,6 +148,28 @@ private class InMemoryAppStore :
         }.onFailure {
             ConsoleLogger.log("import failed file=$fileName error=${it.message}")
         }.getOrThrow()
+    }
+
+    override fun installExtensionFromGit(url: String, ref: String?): String {
+        val cleanUrl = url.trim()
+        require(cleanUrl.startsWith("https://") || cleanUrl.startsWith("http://")) {
+            "请输入合法 Git URL（http/https）"
+        }
+        val sourceName = cleanUrl.substringAfterLast('/').removeSuffix(".git").ifBlank { "extension" }
+        val name = resolveOrKeepName(sourceName, _extensions.value.map { it.name })
+        val ext = ExtensionPackage(
+            id = UUID.randomUUID().toString(),
+            name = name,
+            description = "来自 Git 安装",
+            hooks = listOf("onAppStart", "onSettingsOpen", "beforeSend", "afterReceive"),
+            permissions = listOf("chatRead", "chatWrite"),
+            sourceUrl = cleanUrl,
+            sourceRef = ref?.trim()?.ifBlank { null },
+            enabled = false,
+        )
+        _extensions.update { upsertByMode(it, ext, sourceName) }
+        ConsoleLogger.log("install extension from git url=$cleanUrl ref=${ext.sourceRef}")
+        return "已添加扩展来源: ${ext.name}"
     }
 
     override fun toggleExtension(extensionId: String) {
@@ -222,41 +245,49 @@ private class InMemoryAppStore :
         return matched.joinToString(separator = "\n") { "[World] ${it.content}" }
     }
 
-    private fun importCharacterPng(fileName: String, bytes: ByteArray): CharacterCard {
-        val textChunk = extractCharaFromPng(bytes)
-            ?: throw IllegalArgumentException("PNG 未找到可解析角色卡字段（chara/tEXt）")
+    private fun importCharacterImage(fileName: String, bytes: ByteArray): CharacterCard {
+        val textChunk = extractCharaFromPng(bytes) ?: extractCharaFromWebp(bytes)
+            ?: throw IllegalArgumentException("图片内未找到酒馆角色卡字段（chara/chara_card_v2）")
 
         val root = json.parseToJsonElement(textChunk).jsonObject
-        val data = if (root["data"] != null) root["data"]!!.jsonObject else root
+        val data = when {
+            root["data"] is JsonObject -> root["data"]!!.jsonObject
+            root["chara_card_v2"] is JsonObject -> root["chara_card_v2"]!!.jsonObject
+            else -> root
+        }
 
-        val sourceName = data.str("name") ?: fileName.substringBeforeLast('.')
-        val id = UUID.randomUUID().toString()
-
-        val card = CharacterCard(
-            id = id,
-            name = resolveOrKeepName(sourceName, _characters.value.map { it.name }),
-            description = data.str("description") ?: "",
-            personality = data.str("personality") ?: "",
-            scenario = data.str("scenario") ?: "",
-            firstMessage = data.str("first_mes") ?: data.str("firstMessage") ?: "",
-            mesExample = data.str("mes_example") ?: "",
-            creator = data.str("creator") ?: "",
-            tags = data.arrayStr("tags"),
-            avatarPath = fileName,
-        )
+        val card = parseCharacterFromJsonObject(fileName, data)
 
         _characters.update { old ->
             when (_importConflictMode.value) {
                 ImportConflictMode.Rename -> old + card
                 ImportConflictMode.Overwrite -> {
-                    val idx = old.indexOfFirst { it.name == sourceName }
-                    if (idx >= 0) old.toMutableList().apply { set(idx, card.copy(name = sourceName)) }.toList()
-                    else old + card.copy(name = sourceName)
+                    val idx = old.indexOfFirst { it.name == card.name }
+                    if (idx >= 0) old.toMutableList().apply { set(idx, card.copy(name = card.name)) }.toList()
+                    else old + card.copy(name = card.name)
                 }
             }
         }
         ConsoleLogger.log("import character success name=${card.name} mode=${_importConflictMode.value}")
         return card
+    }
+
+    private fun parseCharacterFromJsonObject(fileName: String, data: JsonObject): CharacterCard {
+        val body = if (data["data"] is JsonObject) data["data"]!!.jsonObject else data
+        val sourceName = body.str("name") ?: body.str("char_name") ?: data.str("name") ?: fileName.substringBeforeLast('.')
+        val id = UUID.randomUUID().toString()
+        return CharacterCard(
+            id = id,
+            name = resolveOrKeepName(sourceName, _characters.value.map { it.name }),
+            description = body.str("description") ?: body.str("char_persona") ?: "",
+            personality = body.str("personality") ?: "",
+            scenario = body.str("scenario") ?: "",
+            firstMessage = body.str("first_mes") ?: body.str("firstMessage") ?: body.str("char_greeting") ?: "",
+            mesExample = body.str("mes_example") ?: body.str("example_dialogue") ?: "",
+            creator = body.str("creator") ?: "",
+            tags = body.arrayStr("tags"),
+            avatarPath = fileName,
+        )
     }
 
     private fun importJsonSmart(fileName: String, text: String): String {
@@ -266,6 +297,27 @@ private class InMemoryAppStore :
 
         if (rootObj == null && rootArr == null) {
             throw IllegalArgumentException("无法识别该 JSON 结构")
+        }
+
+        if (rootObj != null && isCharacterJson(rootObj)) {
+            val data = when {
+                rootObj["data"] is JsonObject -> rootObj["data"]!!.jsonObject
+                rootObj["chara_card_v2"] is JsonObject -> rootObj["chara_card_v2"]!!.jsonObject
+                else -> rootObj
+            }
+            val card = parseCharacterFromJsonObject(fileName, data)
+            _characters.update { old ->
+                when (_importConflictMode.value) {
+                    ImportConflictMode.Rename -> old + card
+                    ImportConflictMode.Overwrite -> {
+                        val idx = old.indexOfFirst { it.name == card.name }
+                        if (idx >= 0) old.toMutableList().apply { set(idx, card.copy(name = card.name)) }.toList()
+                        else old + card.copy(name = card.name)
+                    }
+                }
+            }
+            ConsoleLogger.log("import character json success name=${card.name}")
+            return "已导入角色卡: ${card.name}"
         }
 
         if (rootObj?.containsKey("theme") == true || rootObj?.containsKey("tokens") == true || fileName.lowercase().contains("theme")) {
@@ -486,12 +538,33 @@ private class InMemoryAppStore :
 
             if (type == "tEXt" || type == "iTXt") {
                 val raw = bytes.copyOfRange(dataStart, dataEnd).toString(Charsets.UTF_8)
-                if (raw.startsWith("chara\u0000")) {
-                    val payload = raw.substringAfter('\u0000')
-                    return decodeBase64IfNeeded(payload)
+                val payload = when {
+                    raw.startsWith("chara\u0000") -> raw.substringAfter('\u0000')
+                    raw.startsWith("chara_card_v2\u0000") -> raw.substringAfter('\u0000')
+                    else -> null
                 }
+                if (payload != null) return decodeBase64IfNeeded(payload)
             }
             offset = dataEnd + 4
+        }
+        return null
+    }
+
+    private fun extractCharaFromWebp(bytes: ByteArray): String? {
+        val ascii = bytes.toString(Charsets.ISO_8859_1)
+        val keys = listOf("chara\u0000", "chara_card_v2\u0000")
+        for (key in keys) {
+            val idx = ascii.indexOf(key)
+            if (idx < 0) continue
+            val start = idx + key.length
+            val tail = ascii.substring(start)
+            val endJson = tail.indexOfLast { it == '}' }
+            if (endJson > 0) {
+                val payload = tail.substring(0, endJson + 1)
+                return decodeBase64IfNeeded(payload)
+            }
+            val lineEnd = tail.indexOf('\u0000').let { if (it <= 0) tail.length else it }
+            return decodeBase64IfNeeded(tail.substring(0, lineEnd))
         }
         return null
     }
@@ -510,6 +583,15 @@ private class InMemoryAppStore :
             ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
             ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
             (bytes[offset + 3].toInt() and 0xFF)
+    }
+
+    private fun isCharacterJson(root: JsonObject): Boolean {
+        return root.containsKey("spec") ||
+            root.containsKey("first_mes") ||
+            root.containsKey("char_name") ||
+            root.containsKey("char_persona") ||
+            root.containsKey("chara_card_v2") ||
+            root.containsKey("data")
     }
 
     private fun JsonObject.str(key: String): String? =

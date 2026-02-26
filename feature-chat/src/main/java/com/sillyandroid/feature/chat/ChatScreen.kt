@@ -14,17 +14,22 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sillyandroid.core.model.Role
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel,
@@ -34,38 +39,108 @@ fun ChatScreen(
     val characters by viewModel.characters.collectAsStateWithLifecycle()
     val presets by viewModel.presets.collectAsStateWithLifecycle()
 
+    var modelMenuExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("聊天（支持导入联动）", style = MaterialTheme.typography.titleMedium)
+        Text("聊天", style = MaterialTheme.typography.titleMedium)
 
-        OutlinedTextField(
-            value = uiState.providerConfig.baseUrl,
-            onValueChange = { viewModel.updateProvider(it, uiState.providerConfig.apiKey, uiState.providerConfig.model) },
-            label = { Text("Base URL") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("API 连接", style = MaterialTheme.typography.titleSmall)
+                OutlinedTextField(
+                    value = uiState.providerConfig.baseUrl,
+                    onValueChange = { viewModel.updateProvider(it, uiState.providerConfig.apiKey, uiState.providerConfig.model) },
+                    label = { Text("Base URL") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
 
-        OutlinedTextField(
-            value = uiState.providerConfig.apiKey,
-            onValueChange = { viewModel.updateProvider(uiState.providerConfig.baseUrl, it, uiState.providerConfig.model) },
-            label = { Text("API Key") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
+                OutlinedTextField(
+                    value = uiState.providerConfig.apiKey,
+                    onValueChange = { viewModel.updateProvider(uiState.providerConfig.baseUrl, it, uiState.providerConfig.model) },
+                    label = { Text("API Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
 
-        OutlinedTextField(
-            value = uiState.providerConfig.model,
-            onValueChange = { viewModel.updateProvider(uiState.providerConfig.baseUrl, uiState.providerConfig.apiKey, it) },
-            label = { Text("Model") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = viewModel::refreshModels, enabled = !uiState.isModelsLoading) {
+                        Text(if (uiState.isModelsLoading) "获取中..." else "获取模型")
+                    }
+                    if (uiState.isModelsLoading) {
+                        CircularProgressIndicator(modifier = Modifier.height(20.dp))
+                    }
+                }
+
+                OutlinedTextField(
+                    value = uiState.providerConfig.model,
+                    onValueChange = { viewModel.updateProvider(uiState.providerConfig.baseUrl, uiState.providerConfig.apiKey, it) },
+                    label = { Text("Model") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (uiState.availableModels.isNotEmpty()) {
+                            Button(onClick = { modelMenuExpanded = !modelMenuExpanded }) {
+                                Text("选择")
+                            }
+                        }
+                    },
+                )
+
+                if (modelMenuExpanded && uiState.availableModels.isNotEmpty()) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(6.dp)) {
+                            uiState.availableModels.take(30).forEach { model ->
+                                Button(
+                                    onClick = {
+                                        viewModel.updateProvider(
+                                            uiState.providerConfig.baseUrl,
+                                            uiState.providerConfig.apiKey,
+                                            model,
+                                        )
+                                        modelMenuExpanded = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(model)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("角色与预设", style = MaterialTheme.typography.titleSmall)
+                if (characters.isEmpty()) {
+                    Text("暂无角色，请先在导入页导入 Tavern 角色卡（png/webp/json）")
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        characters.take(4).forEach { ch ->
+                            Button(onClick = { viewModel.selectCharacter(ch.id) }) { Text(ch.name) }
+                        }
+                    }
+                }
+
+                if (presets.isEmpty()) {
+                    Text("暂无预设")
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        presets.take(4).forEach { preset ->
+                            Button(onClick = { viewModel.selectPreset(preset.id) }) { Text(preset.name) }
+                        }
+                    }
+                }
+            }
+        }
 
         OutlinedTextField(
             value = uiState.persona,
@@ -73,36 +148,6 @@ fun ChatScreen(
             label = { Text("用户 Persona") },
             modifier = Modifier.fillMaxWidth(),
         )
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("已导入角色选择", style = MaterialTheme.typography.labelLarge)
-                if (characters.isEmpty()) {
-                    Text("暂无角色，请先在导入页导入 PNG 角色卡")
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        characters.take(3).forEach { ch ->
-                            Button(onClick = { viewModel.selectCharacter(ch.id) }) {
-                                Text(ch.name)
-                            }
-                        }
-                    }
-                }
-
-                Text("已导入预设选择", style = MaterialTheme.typography.labelLarge)
-                if (presets.isEmpty()) {
-                    Text("暂无预设，请先在导入页导入 JSON 预设")
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        presets.take(3).forEach { preset ->
-                            Button(onClick = { viewModel.selectPreset(preset.id) }) {
-                                Text(preset.name)
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = viewModel::newChat) {

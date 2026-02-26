@@ -21,6 +21,8 @@ interface ImportUseCasePort {
 
     fun importBytes(fileName: String, bytes: ByteArray): String
 
+    fun installExtensionFromGit(url: String, ref: String?): String
+
     fun setConflictMode(mode: ImportConflictMode)
 
     fun toggleExtension(extensionId: String)

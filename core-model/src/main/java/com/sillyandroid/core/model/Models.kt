@@ -82,6 +82,8 @@ data class ExtensionPackage(
     val beforeSendPrefix: String = "",
     val afterReceiveSuffix: String = "",
     val enabled: Boolean = false,
+    val sourceUrl: String? = null,
+    val sourceRef: String? = null,
 )
 
 @Serializable

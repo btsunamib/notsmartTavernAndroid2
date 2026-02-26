@@ -35,6 +35,10 @@ class ChatUseCase(
         extensionRepository.dispatchEvent(event)
     }
 
+    override suspend fun fetchModels(config: ProviderConfig): List<String> {
+        return chatClient.fetchModels(config)
+    }
+
     override fun streamAssistantReply(
         config: ProviderConfig,
         messages: List<ChatMessage>,

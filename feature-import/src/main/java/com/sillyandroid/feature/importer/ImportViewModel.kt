@@ -37,6 +37,16 @@ class ImportViewModel(
         }
     }
 
+    fun installExtensionFromGit(url: String, ref: String?) {
+        runCatching {
+            importUseCase.installExtensionFromGit(url, ref)
+        }.onSuccess { msg ->
+            _uiState.update { it.copy(lastMessage = msg, error = null) }
+        }.onFailure { e ->
+            _uiState.update { it.copy(error = e.message ?: "扩展安装失败") }
+        }
+    }
+
     fun setConflictMode(mode: ImportConflictMode) {
         importUseCase.setConflictMode(mode)
         _uiState.update { it.copy(lastMessage = "冲突策略已切换为 $mode", error = null) }

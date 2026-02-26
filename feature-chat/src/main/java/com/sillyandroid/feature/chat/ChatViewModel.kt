@@ -27,6 +27,8 @@ data class ChatUiState(
     val persona: String = "你是一个有帮助、简洁的助手。",
     val selectedCharacterId: String? = null,
     val selectedPresetId: String? = null,
+    val availableModels: List<String> = emptyList(),
+    val isModelsLoading: Boolean = false,
 )
 
 class ChatViewModel(
@@ -56,6 +58,33 @@ class ChatViewModel(
                     model = model,
                 ),
             )
+        }
+    }
+
+    fun refreshModels() {
+        val config = _uiState.value.providerConfig
+        if (config.baseUrl.isBlank() || config.apiKey.isBlank()) {
+            _uiState.update { it.copy(error = "请先填写 Base URL 和 API Key") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isModelsLoading = true, error = null) }
+            runCatching { chatUseCase.fetchModels(config) }
+                .onSuccess { models ->
+                    _uiState.update { state ->
+                        val fallback = listOf(state.providerConfig.model).filter { it.isNotBlank() }
+                        val list = (models + fallback).distinct()
+                        val selected = if (list.contains(state.providerConfig.model)) state.providerConfig.model else list.firstOrNull().orEmpty()
+                        state.copy(
+                            availableModels = list,
+                            providerConfig = state.providerConfig.copy(model = selected),
+                            isModelsLoading = false,
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isModelsLoading = false, error = e.message ?: "模型获取失败") }
+                }
         }
     }
 
