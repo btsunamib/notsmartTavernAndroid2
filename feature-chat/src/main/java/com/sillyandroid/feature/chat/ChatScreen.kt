@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sillyandroid.core.model.ImportConflictMode
 import com.sillyandroid.core.model.Role
-import com.sillyandroid.feature.importer.readFileBytesFromUri
 
 @Composable
 fun ChatScreen(

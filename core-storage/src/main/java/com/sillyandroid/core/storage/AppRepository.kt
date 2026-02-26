@@ -328,15 +328,15 @@ private class InMemoryAppStore :
             return "已导入主题: ${theme.name}"
         }
 
-        if (rootObj?.containsKey("manifest") == true || rootObj?.containsKey("permissions") == true || rootObj?.containsKey("entry") == true) {
-            val ext = parseExtension(fileName, rootObj ?: JsonObject(emptyMap()))
+        if (rootObj != null && (rootObj.containsKey("manifest") || rootObj.containsKey("permissions") || rootObj.containsKey("entry"))) {
+            val ext = parseExtension(fileName, rootObj)
             _extensions.update { upsertByMode(it, ext, ext.name) }
             ConsoleLogger.log("import extension success name=${ext.name}")
             return "已导入扩展: ${ext.name}"
         }
 
-        if ((rootObj?.containsKey("entries") == true) || (rootObj?.containsKey("world_info") == true)) {
-            val wb = parseWorldBook(fileName, rootObj!!)
+        if (rootObj != null && (rootObj.containsKey("entries") || rootObj.containsKey("world_info"))) {
+            val wb = parseWorldBook(fileName, rootObj)
             _worldBooks.update { upsertByMode(it, wb, wb.name) }
             ConsoleLogger.log("import worldbook success name=${wb.name}")
             return "已导入世界书: ${wb.name}"
