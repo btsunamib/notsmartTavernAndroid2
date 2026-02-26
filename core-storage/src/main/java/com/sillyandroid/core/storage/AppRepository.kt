@@ -339,7 +339,7 @@ private class InMemoryAppStore :
         }
     }
 
-    private fun extractName(item: Any): String = when (item) {
+    private fun extractName(item: Any?): String = when (item) {
         is ThemeConfig -> item.name
         is ExtensionPackage -> item.name
         is WorldBook -> item.name
