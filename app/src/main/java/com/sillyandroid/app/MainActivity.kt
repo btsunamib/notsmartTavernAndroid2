@@ -34,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,6 +69,7 @@ private enum class Tab(val title: String) {
 @Composable
 private fun AppRoot() {
     var currentTab by remember { mutableStateOf(Tab.Chat) }
+    val context = LocalContext.current
     val appGraph = remember { AppGraph() }
     val coordinatorViewModel: AppCoordinatorViewModel = viewModel(
         factory = AppCoordinatorViewModelFactory(appGraph),
@@ -129,7 +131,7 @@ private fun AppRoot() {
 
                 Tab.Import -> ImportScreen(
                     viewModel = importViewModel,
-                    readBytes = { uri -> readFileBytesFromUri(this, uri) },
+                    readBytes = { uri -> readFileBytesFromUri(context, uri) },
                     modifier = Modifier.padding(innerPadding),
                 )
 
@@ -139,7 +141,7 @@ private fun AppRoot() {
 
                 Tab.Console -> ConsoleScreen(
                     modifier = Modifier.padding(innerPadding),
-                    context = this,
+                    context = context,
                 )
             }
         }
