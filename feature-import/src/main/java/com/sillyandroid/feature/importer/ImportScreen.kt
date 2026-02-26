@@ -2,6 +2,7 @@ package com.sillyandroid.feature.importer
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -237,7 +238,11 @@ private fun ThemeCard(
 }
 
 fun readFileBytesFromUri(context: Context, uri: Uri): Pair<String, ByteArray>? {
-    val name = uri.lastPathSegment?.substringAfterLast('/') ?: "imported_file"
+    val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
+    }
+    val name = fileName ?: uri.lastPathSegment?.substringAfterLast('/') ?: "imported_file"
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
     return name to bytes
 }
