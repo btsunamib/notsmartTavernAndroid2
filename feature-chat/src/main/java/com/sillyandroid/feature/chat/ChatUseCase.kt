@@ -5,9 +5,9 @@ import com.sillyandroid.core.model.NetworkMessage
 import com.sillyandroid.core.model.ProviderConfig
 import com.sillyandroid.core.model.Role
 import com.sillyandroid.core.network.ChatClient
-import com.sillyandroid.core.network.OpenAiCompatibleClient
 import com.sillyandroid.core.storage.ChatRepository
 import com.sillyandroid.core.storage.ExtensionRepository
+import com.sillyandroid.core.storage.ImportRepository
 import com.sillyandroid.core.storage.LibraryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,10 +22,13 @@ class ChatUseCase(
     private val chatClient: ChatClient,
     private val libraryRepository: LibraryRepository,
     private val extensionRepository: ExtensionRepository,
+    private val importRepository: ImportRepository,
     private val chatRepository: ChatRepository,
 ) : ChatUseCasePort {
     override val characters: StateFlow<List<com.sillyandroid.core.model.CharacterCard>> = libraryRepository.characters
     override val presets: StateFlow<List<com.sillyandroid.core.model.Preset>> = libraryRepository.presets
+    override val worldBooks: StateFlow<List<com.sillyandroid.core.model.WorldBook>> = libraryRepository.worldBooks
+    override val extensions: StateFlow<List<com.sillyandroid.core.model.ExtensionPackage>> = libraryRepository.extensions
 
     override fun prepareUserInput(rawInput: String): String {
         return extensionRepository.applyBeforeSendExtensions(rawInput)
@@ -37,6 +40,18 @@ class ChatUseCase(
 
     override suspend fun fetchModels(config: ProviderConfig): List<String> {
         return chatClient.fetchModels(config)
+    }
+
+    override fun importBytes(fileName: String, bytes: ByteArray): String {
+        return importRepository.importByName(fileName, bytes)
+    }
+
+    override fun installExtensionFromGit(url: String, ref: String?): String {
+        return importRepository.installExtensionFromGit(url, ref)
+    }
+
+    override fun toggleExtension(extensionId: String) {
+        extensionRepository.toggleExtension(extensionId)
     }
 
     override fun streamAssistantReply(

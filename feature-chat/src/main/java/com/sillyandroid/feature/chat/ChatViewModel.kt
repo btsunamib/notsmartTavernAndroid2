@@ -3,8 +3,10 @@ package com.sillyandroid.feature.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sillyandroid.core.model.ChatMessage
+import com.sillyandroid.core.model.ImportConflictMode
 import com.sillyandroid.core.model.ProviderConfig
 import com.sillyandroid.core.model.Role
+import com.sillyandroid.core.storage.AppRepository
 import com.sillyandroid.core.network.ConsoleLogger
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +14,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class SettingsPanel {
+    Preset,
+    Api,
+    World,
+    Extension,
+    Persona,
+    Character,
+}
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
@@ -29,6 +40,10 @@ data class ChatUiState(
     val selectedPresetId: String? = null,
     val availableModels: List<String> = emptyList(),
     val isModelsLoading: Boolean = false,
+    val topPanel: SettingsPanel = SettingsPanel.Preset,
+    val importConflictMode: ImportConflictMode = ImportConflictMode.Rename,
+    val lastImportMessage: String = "请选择文件导入",
+    val importError: String? = null,
 )
 
 class ChatViewModel(
@@ -37,9 +52,15 @@ class ChatViewModel(
 
     val characters = chatUseCase.characters
     val presets = chatUseCase.presets
+    val worldBooks = chatUseCase.worldBooks
+    val extensions = chatUseCase.extensions
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+
+    fun switchPanel(panel: SettingsPanel) {
+        _uiState.update { it.copy(topPanel = panel) }
+    }
 
     fun updateInput(value: String) {
         _uiState.update { it.copy(input = value) }
@@ -86,6 +107,36 @@ class ChatViewModel(
                     _uiState.update { it.copy(isModelsLoading = false, error = e.message ?: "模型获取失败") }
                 }
         }
+    }
+
+    fun importBytes(fileName: String, bytes: ByteArray) {
+        runCatching {
+            chatUseCase.importBytes(fileName, bytes)
+        }.onSuccess { msg ->
+            _uiState.update { it.copy(lastImportMessage = msg, importError = null) }
+        }.onFailure { e ->
+            _uiState.update { it.copy(importError = e.message ?: "导入失败") }
+        }
+    }
+
+    fun installExtensionFromGit(url: String, ref: String?) {
+        runCatching {
+            chatUseCase.installExtensionFromGit(url, ref)
+        }.onSuccess { msg ->
+            _uiState.update { it.copy(lastImportMessage = msg, importError = null) }
+        }.onFailure { e ->
+            _uiState.update { it.copy(importError = e.message ?: "扩展安装失败") }
+        }
+    }
+
+    fun setConflictMode(mode: ImportConflictMode) {
+        AppRepository.setImportConflictMode(mode)
+        _uiState.update { it.copy(importConflictMode = mode, lastImportMessage = "冲突策略已切换为 $mode", importError = null) }
+    }
+
+    fun toggleExtension(extensionId: String) {
+        chatUseCase.toggleExtension(extensionId)
+        _uiState.update { it.copy(lastImportMessage = "已切换扩展开关", importError = null) }
     }
 
     fun updatePersona(value: String) {

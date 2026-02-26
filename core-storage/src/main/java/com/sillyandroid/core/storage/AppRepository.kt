@@ -349,7 +349,16 @@ private class InMemoryAppStore :
             return "已导入正则: ${rs.name}"
         }
 
-        if (rootObj?.containsKey("temperature") == true || rootObj?.containsKey("model") == true) {
+        if (
+            rootObj?.containsKey("temperature") == true ||
+            rootObj?.containsKey("model") == true ||
+            rootObj?.containsKey("temp") == true ||
+            rootObj?.containsKey("top_p") == true ||
+            rootObj?.containsKey("top_k") == true ||
+            rootObj?.containsKey("rep_pen") == true ||
+            rootObj?.containsKey("sampler_order") == true ||
+            rootObj?.containsKey("order") == true
+        ) {
             val preset = parsePreset(fileName, rootObj)
             _presets.update { upsertByMode(it, preset, preset.name) }
             ConsoleLogger.log("import preset success name=${preset.name}")
@@ -518,12 +527,29 @@ private class InMemoryAppStore :
     private fun parsePreset(fileName: String, root: JsonObject): Preset {
         val sourceName = root.str("name") ?: fileName.substringBeforeLast('.')
         val name = resolveOrKeepName(sourceName, _presets.value.map { it.name })
+
+        val resolvedModel = root.str("model")
+            ?: root.str("preset")
+            ?: root.str("api")
+            ?: "gpt-4o-mini"
+
+        val resolvedTemp = root.double("temperature")
+            ?: root.double("temp")
+            ?: root.double("t")
+            ?: 0.8
+
+        val system = root.str("system_prompt")
+            ?: root.str("systemPrompt")
+            ?: root.str("prompt")
+            ?: root.str("instruction")
+            ?: ""
+
         return Preset(
             id = UUID.randomUUID().toString(),
             name = name,
-            model = root.str("model") ?: "gpt-4o-mini",
-            temperature = root.double("temperature") ?: 0.8,
-            systemPrompt = root.str("system_prompt") ?: root.str("systemPrompt") ?: "",
+            model = resolvedModel,
+            temperature = resolvedTemp,
+            systemPrompt = system,
         )
     }
 

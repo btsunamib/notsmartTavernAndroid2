@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -59,16 +57,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab(val title: String) {
-    Chat("聊天"),
-    Import("导入"),
-    Frontend("前端"),
-    Console("控制台"),
-}
-
 @Composable
 private fun AppRoot() {
-    var currentTab by remember { mutableStateOf(Tab.Chat) }
     val context = LocalContext.current
     val appGraph = remember { AppGraph() }
     val coordinatorViewModel: AppCoordinatorViewModel = viewModel(
@@ -77,9 +67,6 @@ private fun AppRoot() {
     val chatViewModel: ChatViewModel = viewModel(
         factory = ChatViewModelFactory(appGraph),
     )
-    val importViewModel: ImportViewModel = viewModel(
-        factory = ImportViewModelFactory(appGraph),
-    )
 
     val themes by coordinatorViewModel.themes.collectAsStateWithLifecycle()
     val selectedThemeId by coordinatorViewModel.selectedThemeId.collectAsStateWithLifecycle()
@@ -87,12 +74,7 @@ private fun AppRoot() {
 
     LaunchedEffect(Unit) {
         coordinatorViewModel.onAppStart()
-    }
-
-    LaunchedEffect(currentTab) {
-        if (currentTab == Tab.Import) {
-            coordinatorViewModel.onSettingsOpen()
-        }
+        coordinatorViewModel.onSettingsOpen()
     }
 
     val colorScheme = remember(selectedThemeId, themes) {
@@ -110,40 +92,12 @@ private fun AppRoot() {
     MaterialTheme(colorScheme = colorScheme) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            bottomBar = {
-                NavigationBar {
-                    Tab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentTab == tab,
-                            onClick = { currentTab = tab },
-                            label = { Text(tab.title) },
-                            icon = {},
-                        )
-                    }
-                }
-            },
         ) { innerPadding ->
-            when (currentTab) {
-                Tab.Chat -> ChatScreen(
-                    viewModel = chatViewModel,
-                    modifier = Modifier.padding(innerPadding),
-                )
-
-                Tab.Import -> ImportScreen(
-                    viewModel = importViewModel,
-                    readBytes = { uri -> readFileBytesFromUri(context, uri) },
-                    modifier = Modifier.padding(innerPadding),
-                )
-
-                Tab.Frontend -> FrontendWebViewScreen(
-                    modifier = Modifier.padding(innerPadding),
-                )
-
-                Tab.Console -> ConsoleScreen(
-                    modifier = Modifier.padding(innerPadding),
-                    context = context,
-                )
-            }
+            ChatScreen(
+                viewModel = chatViewModel,
+                readBytes = { uri -> readFileBytesFromUri(context, uri) },
+                modifier = Modifier.padding(innerPadding),
+            )
         }
     }
 }

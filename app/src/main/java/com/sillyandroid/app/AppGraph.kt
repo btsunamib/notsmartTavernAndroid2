@@ -31,6 +31,7 @@ class AppGraph {
         chatClient = chatClient,
         libraryRepository = libraryRepository,
         extensionRepository = extensionRepository,
+        importRepository = importRepository,
         chatRepository = chatRepository,
     )
 
